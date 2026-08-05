@@ -1,0 +1,6 @@
+{
+  "name": "Sistema de Estoque de Enfermagem CEET",
+  "description": "Plataforma web oficial de controle de estoque de enfermagem do CEET com rastreabilidade, controle de lotes, validades, alertas de estoque mínimo, sugestão de compras e relatórios.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
