@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { app, initializeServer } from '../server';
+import { app, initializeServer } from '../server.ts';
 
 let ready: Promise<void> | null = null;
 
