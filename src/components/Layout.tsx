@@ -22,6 +22,7 @@ import {
   History,
   Layers,
   LogOut,
+  MapPin,
   Moon,
   PackagePlus,
   PackageMinus,
@@ -37,8 +38,16 @@ import {
   Building2,
   Stethoscope,
   HeartPulse,
+  Wrench,
+  GraduationCap,
+  ArrowRightLeft,
+  ShieldAlert,
+  LifeBuoy,
+  Menu,
+  X,
 } from 'lucide-react';
 import { User, Role } from '../types';
+import { AIAssistant } from './common/AIAssistant';
 import { initialUsers } from '../server/seedData';
 import { api } from '../services/api';
 
@@ -74,10 +83,14 @@ export const Layout: React.FC<LayoutProps> = ({
   const [allUsers, setAllUsers] = useState<User[]>(initialUsers);
 
   useEffect(() => {
+    if (currentUser.role !== 'ADMIN') {
+      setAllUsers([currentUser]);
+      return;
+    }
     api.getUsers().then((users) => {
       if (users && users.length > 0) setAllUsers(users);
-    });
-  }, []);
+    }).catch(() => setAllUsers([currentUser]));
+  }, [currentUser]);
 
   // Menu Oficial (Cap. 11.3 - Fluxo Geral de Navegação)
   const menuSections = [
@@ -94,6 +107,18 @@ export const Layout: React.FC<LayoutProps> = ({
         { id: 'categories', label: 'Categorias', icon: Folder, roles: ['ADMIN', 'ESTOQUE'] },
         { id: 'manufacturers', label: 'Fabricantes', icon: Building2, roles: ['ADMIN', 'ESTOQUE'] },
         { id: 'suppliers', label: 'Fornecedores', icon: Truck, roles: ['ADMIN', 'ESTOQUE'] },
+        { id: 'locations', label: 'Localizações', icon: MapPin, roles: ['ADMIN', 'ESTOQUE'] },
+        { id: 'units', label: 'Unidades de Medida', icon: PackagePlus, roles: ['ADMIN', 'ESTOQUE'] },
+      ],
+    },
+    {
+      label: 'Gestão Operacional',
+      items: [
+        { id: 'patrimony', label: 'Patrimônio', icon: Building2, roles: ['ADMIN', 'ESTOQUE', 'TECNICO', 'COORDENACAO'] },
+        { id: 'maintenance', label: 'Manutenção', icon: Wrench, roles: ['ADMIN', 'ESTOQUE', 'TECNICO'] },
+        { id: 'lessons', label: 'Aulas Práticas', icon: GraduationCap, roles: ['ADMIN', 'PROFESSOR', 'COORDENACAO', 'ESTOQUE'] },
+        { id: 'loans', label: 'Empréstimos', icon: ArrowRightLeft, roles: ['ADMIN', 'ESTOQUE', 'PROFESSOR', 'COORDENACAO'] },
+        { id: 'occurrences', label: 'Ocorrências', icon: ShieldAlert, roles: ['ADMIN', 'ESTOQUE', 'COORDENACAO'] },
       ],
     },
     {
@@ -110,6 +135,7 @@ export const Layout: React.FC<LayoutProps> = ({
         { id: 'purchases', label: 'Compras e Sugestão', icon: Layers, roles: ['ADMIN', 'ESTOQUE', 'COORDENACAO'] },
         { id: 'history', label: 'Histórico & Rastreio', icon: History, roles: ['ADMIN', 'ESTOQUE', 'PROFESSOR', 'COORDENACAO'] },
         { id: 'reports', label: 'Relatórios & Exportação', icon: FileText, roles: ['ADMIN', 'ESTOQUE', 'PROFESSOR', 'COORDENACAO'] },
+        { id: 'support', label: 'Central de Ajuda', icon: LifeBuoy, roles: ['ADMIN', 'ESTOQUE', 'PROFESSOR', 'COORDENACAO', 'TECNICO', 'ESTAGIARIO', 'FUNCIONARIO'] },
       ],
     },
     {
@@ -117,7 +143,8 @@ export const Layout: React.FC<LayoutProps> = ({
       items: [
         { id: 'users', label: 'Gerenciamento de Usuários', icon: Users, roles: ['ADMIN'] },
         { id: 'audit', label: 'Auditoria de Ações', icon: Shield, roles: ['ADMIN'] },
-        { id: 'settings', label: 'Configurações e Backup', icon: SettingsIcon, roles: ['ADMIN'] },
+        { id: 'database', label: 'Banco de Dados (JSON)', icon: Database, roles: ['ADMIN', 'ESTOQUE', 'PROFESSOR', 'COORDENACAO'] },
+        { id: 'settings', label: 'Configurações e Backup', icon: SettingsIcon, roles: ['ADMIN', 'ESTOQUE', 'PROFESSOR', 'COORDENACAO'] },
       ],
     },
   ];
@@ -196,6 +223,16 @@ export const Layout: React.FC<LayoutProps> = ({
             )}
           </button>
 
+          {/* Botão Global CEET IA Core */}
+          <div className="hidden sm:block">
+            <AIAssistant 
+              category="GESTAO" 
+              context="Global / Navegação" 
+              data={{ activeTab, user: currentUser.name }} 
+              buttonText="IA Suporte"
+            />
+          </div>
+
           {/* Botão Tema Claro/Escuro - Cap 10.26 */}
           <button
             onClick={() => setIsDarkMode(!isDarkMode)}
@@ -211,9 +248,13 @@ export const Layout: React.FC<LayoutProps> = ({
               onClick={() => setShowUserDropdown(!showUserDropdown)}
               className="flex items-center gap-2.5 p-1.5 sm:px-3 sm:py-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-colors"
             >
-              <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 flex items-center justify-center font-bold text-xs uppercase">
-                {currentUser.name.slice(0, 2)}
-              </div>
+              {currentUser.photo_url ? (
+                <img src={currentUser.photo_url} alt={currentUser.name} className="w-8 h-8 rounded-full object-cover border border-slate-200 dark:border-slate-700" />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 flex items-center justify-center font-bold text-xs uppercase">
+                  {currentUser.name.slice(0, 2)}
+                </div>
+              )}
               <div className="hidden md:flex flex-col items-start text-left">
                 <span className="text-xs font-semibold text-slate-800 dark:text-slate-100 max-w-[130px] truncate">
                   {currentUser.name}
@@ -238,15 +279,22 @@ export const Layout: React.FC<LayoutProps> = ({
                         localStorage.setItem('ceet_active_user_id', String(u.id));
                         setShowUserDropdown(false);
                       }}
-                      className={`w-full text-left px-4 py-2.5 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors ${
+                      className={`w-full text-left px-4 py-2.5 flex items-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors ${
                         u.id === currentUser.id ? 'bg-blue-50/60 dark:bg-blue-900/20' : ''
                       }`}
                     >
-                      <div className="flex flex-col">
-                        <span className="text-xs font-semibold text-slate-800 dark:text-slate-100">
+                      {u.photo_url ? (
+                        <img src={u.photo_url} alt={u.name} className="w-9 h-9 rounded-full object-cover shrink-0 border border-slate-200 dark:border-slate-700" />
+                      ) : (
+                        <div className="w-9 h-9 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center font-bold text-xs shrink-0">
+                          {u.name.slice(0, 2)}
+                        </div>
+                      )}
+                      <div className="flex-1 flex flex-col min-w-0">
+                        <span className="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">
                           {u.name}
                         </span>
-                        <span className="text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-[180px]">
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
                           {u.email}
                         </span>
                       </div>

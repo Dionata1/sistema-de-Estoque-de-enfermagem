@@ -3,7 +3,7 @@
  * Telas TEL-003 e TEL-004 - Cadastro, Pesquisa, Filtros e Inativação Lógica de Produtos (RF-001 / RN-001 a RN-005 / RN-009)
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   AlertTriangle,
   Barcode,
@@ -19,10 +19,16 @@ import {
   X,
   Package,
   CheckCircle2,
+  Stethoscope,
+  FileText,
+  Paperclip,
+  ArrowUpRight,
 } from 'lucide-react';
-import { Product, Category, Manufacturer, Supplier, Unit, User } from '../types';
+import { Product, Category, Manufacturer, Supplier, Unit, User, InstitutionalLocation as AppLocation, Attachment } from '../types';
 import { api } from '../services/api';
 import { exportToExcel, exportToCSV, exportToPrint } from '../utils/exportUtils';
+
+import { AIAssistant } from './common/AIAssistant';
 
 interface ProductsViewProps {
   currentUser: User;
@@ -38,6 +44,7 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
   const [manufacturers, setManufacturers] = useState<Manufacturer[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
+  const [locations, setLocations] = useState<AppLocation[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Filtros
@@ -60,28 +67,36 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
   const [unitId, setUnitId] = useState<number>(1);
   const [minimumStock, setMinimumStock] = useState<number>(10);
   const [currentStock, setCurrentStock] = useState<number>(0);
-  const [location, setLocation] = useState('Armário A - Prateleira 1');
+  const [locationId, setLocationId] = useState<number>(0);
   const [barcode, setBarcode] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
   const [formError, setFormError] = useState('');
   const [formSuccess, setFormSuccess] = useState('');
+  
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const attachInputRef = useRef<HTMLInputElement>(null);
 
-  const canEdit = currentUser.role === 'ADMIN' || currentUser.role === 'ESTOQUE';
+  const canEdit = ['ADMIN', 'ESTOQUE', 'PROFESSOR', 'COORDENACAO'].includes(currentUser.role);
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const [prods, cats, mans, sups, unis] = await Promise.all([
+      const [prods, cats, mans, sups, unis, locs] = await Promise.all([
         api.getProducts(),
         api.getCategories(),
         api.getManufacturers(),
         api.getSuppliers(),
         api.getUnits(),
+        api.getLocations(),
       ]);
       setProducts(prods);
       setCategories(cats);
       setManufacturers(mans);
       setSuppliers(sups);
       setUnits(unis);
+      setLocations(locs);
     } catch (err) {
       console.error('Erro ao carregar produtos:', err);
     } finally {
@@ -109,8 +124,10 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
     setUnitId(units[0]?.id || 1);
     setMinimumStock(10);
     setCurrentStock(0);
-    setLocation('Armário A1 - Prateleira 1');
+    setLocationId(locations[0]?.id || 0);
     setBarcode('');
+    setImageUrl('');
+    setAttachments([]);
     setFormError('');
     setFormSuccess('');
     setIsModalOpen(true);
@@ -126,11 +143,53 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
     setUnitId(p.unit_id);
     setMinimumStock(p.minimum_stock);
     setCurrentStock(p.current_stock);
-    setLocation(p.location || '');
+    setLocationId(p.location_id || 0);
     setBarcode(p.barcode || '');
+    setImageUrl(p.image || '');
+    setAttachments(p.attachments || []);
     setFormError('');
     setFormSuccess('');
     setIsModalOpen(true);
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    try {
+      const res = await api.upload(file, currentUser.id);
+      if (res.success && res.data) {
+        setImageUrl(res.data.url);
+      }
+    } catch (err) {
+      console.error('Erro no upload:', err);
+      setFormError('Falha ao carregar imagem.');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleAttachmentUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    try {
+      const res = await api.upload(file, currentUser.id);
+      if (res.success && res.data) {
+        setAttachments(prev => [...prev, res.data as Attachment]);
+      }
+    } catch (err) {
+      console.error('Erro no upload de anexo:', err);
+      setFormError('Falha ao carregar anexo.');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const removeAttachment = (id: string) => {
+    setAttachments(prev => prev.filter(a => a.id !== id));
   };
 
   const handleSaveProduct = async (e: React.FormEvent) => {
@@ -164,8 +223,10 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
           supplier_id: supplierId,
           unit_id: unitId,
           minimum_stock: minimumStock,
-          location,
+          location_id: locationId,
           barcode,
+          image: imageUrl,
+          attachments,
         });
         if (!res.success) {
           setFormError(res.message || 'Erro ao atualizar produto.');
@@ -182,8 +243,10 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
           unit_id: unitId,
           minimum_stock: minimumStock,
           current_stock: currentStock,
-          location,
+          location_id: locationId,
           barcode,
+          image: imageUrl,
+          attachments,
         });
         if (!res.success) {
           setFormError(res.message || 'Já existe um produto com este código (RN-001).');
@@ -236,7 +299,8 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
       const q = searchTerm.toLowerCase().trim();
       const codeMatch = p.code.toLowerCase().includes(q);
       const nameMatch = p.name.toLowerCase().includes(q);
-      const locationMatch = p.location.toLowerCase().includes(q);
+      const locationName = locations.find(l => l.id === p.location_id)?.name || p.location || '';
+      const locationMatch = locationName.toLowerCase().includes(q);
       return codeMatch || nameMatch || locationMatch;
     }
 
@@ -250,7 +314,7 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
     'QUANTIDADE EM ESTOQUE': p.current_stock,
     'UNIDADE DE MEDIDA': p.unit_abbreviation,
     'CATEGORIA': p.category_name || 'Geral',
-    'LOCALIZAÇÃO NO ARMÁRIO': p.location || '-',
+    'LOCALIZAÇÃO NO ARMÁRIO': locations.find(l => l.id === p.location_id)?.name || p.location || '-',
     'STATUS DE ESTOQUE': p.status_label,
     'ESTOQUE MÍNIMO': p.minimum_stock,
     'FABRICANTE': p.manufacturer_name || '-',
@@ -288,7 +352,7 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
         <td>${p.current_stock} ${p.unit_abbreviation}</td>
         <td>${p.minimum_stock} ${p.unit_abbreviation}</td>
         <td><strong>${p.status_label}</strong></td>
-        <td>${p.location || '-'}</td>
+        <td>${locations.find(l => l.id === p.location_id)?.name || p.location || '-'}</td>
       </tr>
     `
       )
@@ -345,6 +409,12 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
               <span>Novo Produto (TEL-004)</span>
             </button>
           )}
+          <AIAssistant 
+            category="ESTOQUE" 
+            context="Controle de Materiais & Suprimentos" 
+            data={products} 
+            buttonText="IA Suprimentos"
+          />
           <button
             onClick={exportAllProductsExcel}
             className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-all shadow-md shadow-emerald-500/20"
@@ -450,6 +520,7 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-500 font-bold uppercase">
+                  <th className="py-3.5 px-4 text-left">Foto</th>
                   <th className="py-3.5 px-4">Código (RN-001)</th>
                   <th className="py-3.5 px-4">Nome do Material (RF-001)</th>
                   <th className="py-3.5 px-4">Categoria</th>
@@ -466,6 +537,15 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
                     key={p.id}
                     className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
                   >
+                    <td className="py-3.5 px-4">
+                      {p.image ? (
+                        <img src={p.image} alt={p.name} className="w-10 h-10 rounded-lg object-cover border border-slate-100 dark:border-slate-800" />
+                      ) : (
+                        <div className="w-10 h-10 rounded-lg bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-300">
+                          <Stethoscope className="w-5 h-5" />
+                        </div>
+                      )}
+                    </td>
                     <td className="py-3.5 px-4 font-bold text-slate-900 dark:text-white">
                       {p.code}
                     </td>
@@ -516,7 +596,7 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
                       )}
                     </td>
                     <td className="py-3.5 px-4 text-slate-600 dark:text-slate-400 text-xs">
-                      {p.location || 'Não informado'}
+                      {locations.find(l => l.id === p.location_id)?.name || p.location || 'Não informado'}
                     </td>
                     <td className="py-3.5 px-4 text-right space-x-1">
                       <button
@@ -530,14 +610,15 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
                         <>
                           <button
                             onClick={() => openEditProductModal(p)}
-                            className="p-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/30 text-blue-600 dark:text-blue-400 transition-colors"
-                            title="Editar Produto (TEL-004)"
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-800 transition-all text-[11px] font-bold"
+                            title="Editar Cadastro do Material"
                           >
-                            <Edit className="w-4 h-4" />
+                            <Edit className="w-3.5 h-3.5" />
+                            <span>✏️ Editar Cadastro</span>
                           </button>
                           <button
                             onClick={() => handleSoftDelete(p)}
-                            className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400 transition-colors"
+                            className="p-1.5 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400 transition-colors"
                             title="Inativação Lógica (Soft Delete RN-009)"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -735,17 +816,104 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
                 </div>
               </div>
 
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Foto do Material (RF-001)
+                </label>
+                <div className="flex items-center gap-4">
+                  <div 
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-24 h-24 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex items-center justify-center cursor-pointer hover:border-blue-500 transition-all overflow-hidden relative group"
+                  >
+                    {imageUrl ? (
+                      <img src={imageUrl} alt="Preview" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="text-center">
+                        <Plus className="w-6 h-6 text-slate-400 mx-auto" />
+                        <span className="text-[10px] text-slate-400">Upload</span>
+                      </div>
+                    )}
+                    {isUploading && (
+                      <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1 space-y-2">
+                    <p className="text-[10px] text-slate-500">
+                      Formatos aceitos: JPG, PNG, WEBP. Tamanho máximo: 2MB.
+                    </p>
+                    {imageUrl && (
+                      <button 
+                        type="button" 
+                        onClick={() => setImageUrl('')}
+                        className="text-[10px] font-bold text-red-600 hover:underline"
+                      >
+                        Remover Foto
+                      </button>
+                    )}
+                  </div>
+                  <input 
+                    type="file" 
+                    ref={fileInputRef} 
+                    className="hidden" 
+                    accept="image/*"
+                    onChange={handleFileUpload} 
+                  />
+                </div>
+              </div>
+
+              {/* Documentos e Anexos */}
+              <div className="space-y-2 mb-4">
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                  Documentos e Anexos (PDF, Manuais, Planilhas)
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {attachments.map(att => (
+                    <div key={att.id} className="flex items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 text-[10px] text-slate-600 dark:text-slate-400 group relative">
+                      <FileText className="w-3 h-3 text-amber-500" />
+                      <span className="truncate max-w-[150px]">{att.name}</span>
+                      <button 
+                        type="button" 
+                        onClick={() => removeAttachment(att.id)}
+                        className="text-red-500 hover:text-red-700"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                  <button 
+                    type="button" 
+                    onClick={() => attachInputRef.current?.click()}
+                    className="flex items-center gap-2 px-3 py-2 rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-800 text-slate-400 hover:border-amber-400 hover:text-amber-500 transition-all text-xs font-bold"
+                  >
+                    <Paperclip className="w-4 h-4" /> Anexar Arquivo
+                  </button>
+                  <input 
+                    type="file" 
+                    ref={attachInputRef} 
+                    className="hidden" 
+                    onChange={handleAttachmentUpload} 
+                  />
+                </div>
+              </div>
+
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                   Localização Física no Almoxarifado / Laboratório CEET
                 </label>
-                <input
-                  type="text"
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                  placeholder="Ex: Armário A1 - Prateleira 2"
+                <select
+                  value={locationId}
+                  onChange={(e) => setLocationId(Number(e.target.value))}
                   className="w-full px-3 py-2 rounded-xl text-xs border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
-                />
+                >
+                  <option value={0}>Selecione um local</option>
+                  {locations.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.name}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
@@ -787,30 +955,42 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
               </button>
             </div>
 
-            <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
-                <span className="text-[11px] text-slate-400">Saldo Atual</span>
-                <p className="text-base font-bold text-slate-900 dark:text-white">
-                  {viewingProduct.current_stock} {viewingProduct.unit_abbreviation}
-                </p>
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-4 gap-4">
+              <div className="sm:col-span-1">
+                {viewingProduct.image ? (
+                  <img src={viewingProduct.image} alt={viewingProduct.name} className="w-full aspect-square rounded-2xl object-cover border border-slate-100 dark:border-slate-800 shadow-sm" />
+                ) : (
+                  <div className="w-full aspect-square rounded-2xl bg-slate-50 dark:bg-slate-800 flex flex-col items-center justify-center text-slate-300 border border-slate-100 dark:border-slate-800">
+                    <Stethoscope className="w-8 h-8 mb-1" />
+                    <span className="text-[10px]">Sem Foto</span>
+                  </div>
+                )}
               </div>
-              <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
-                <span className="text-[11px] text-slate-400">Estoque Mínimo</span>
-                <p className="text-base font-bold text-slate-700 dark:text-slate-300">
-                  {viewingProduct.minimum_stock} {viewingProduct.unit_abbreviation}
-                </p>
-              </div>
-              <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
-                <span className="text-[11px] text-slate-400">Armário / Prateleira</span>
-                <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">
-                  {viewingProduct.location}
-                </p>
-              </div>
-              <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
-                <span className="text-[11px] text-slate-400">Fabricante</span>
-                <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">
-                  {viewingProduct.manufacturer_name}
-                </p>
+              <div className="sm:col-span-3 grid grid-cols-2 gap-3">
+                <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
+                  <span className="text-[11px] text-slate-400">Saldo Atual</span>
+                  <p className="text-base font-bold text-slate-900 dark:text-white">
+                    {viewingProduct.current_stock} {viewingProduct.unit_abbreviation}
+                  </p>
+                </div>
+                <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
+                  <span className="text-[11px] text-slate-400">Estoque Mínimo</span>
+                  <p className="text-base font-bold text-slate-700 dark:text-slate-300">
+                    {viewingProduct.minimum_stock} {viewingProduct.unit_abbreviation}
+                  </p>
+                </div>
+                <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
+                  <span className="text-[11px] text-slate-400">Armário / Prateleira</span>
+                  <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">
+                    {locations.find(l => l.id === viewingProduct.location_id)?.name || viewingProduct.location}
+                  </p>
+                </div>
+                <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
+                  <span className="text-[11px] text-slate-400">Fabricante</span>
+                  <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">
+                    {viewingProduct.manufacturer_name}
+                  </p>
+                </div>
               </div>
             </div>
 
@@ -858,6 +1038,34 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
                 </div>
               )}
             </div>
+
+            {viewingProduct.attachments && viewingProduct.attachments.length > 0 && (
+              <div className="mt-6 animate-in slide-in-from-bottom-2 duration-300">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-3">
+                  Documentos e Materiais de Apoio
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {viewingProduct.attachments.map((att) => (
+                    <a
+                      key={att.id}
+                      href={att.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 hover:border-blue-300 transition-all group"
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-white dark:bg-slate-800 flex items-center justify-center text-blue-600 shadow-xs">
+                        <Paperclip className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200 truncate">{att.name}</p>
+                        <p className="text-[9px] text-slate-400 uppercase">{att.type.split('/')[1] || 'DOC'}</p>
+                      </div>
+                      <ArrowUpRight className="w-3 h-3 ml-auto text-slate-300 group-hover:text-blue-500 transition-colors" />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="mt-6 flex justify-end">
               <button

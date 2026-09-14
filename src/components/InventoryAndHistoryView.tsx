@@ -186,13 +186,13 @@ export const InventoryAndHistoryView: React.FC<InventoryAndHistoryViewProps> = (
   const exportPhysicalInventoryExcel = () => {
     const rows = inventoryItems.map((item, idx) => ({
       'Nº': idx + 1,
-      'CÓDIGO CEET': item.code,
-      'DESCRIÇÃO / MATERIAL DE ENFERMAGEM CEET': item.name,
-      'UNIDADE': item.unit_abbreviation,
-      'ESTOQUE NO SISTEMA': item.system_stock,
+      'CÓDIGO CEET': item.product_code,
+      'DESCRIÇÃO / MATERIAL DE ENFERMAGEM CEET': item.product_name,
+      'UNIDADE': products.find(p => p.id === item.product_id)?.unit_abbreviation || 'N/A',
+      'ESTOQUE NO SISTEMA': item.expected_quantity,
       'CONTAGEM FÍSICA NO ARMÁRIO (PREENCHER)': '',
       'DIVERGÊNCIA IDENTIFICADA': '',
-      'LOCALIZAÇÃO': item.location || '-',
+      'LOCALIZAÇÃO': products.find(p => p.id === item.product_id)?.location || '-',
     }));
     exportToExcel(rows, 'Planilha_Conferencia_Inventario_CEET', 'Inventário Físico CEET');
   };
@@ -353,26 +353,35 @@ export const InventoryAndHistoryView: React.FC<InventoryAndHistoryViewProps> = (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
                   <thead>
-                    <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-500 font-bold uppercase">
-                      <th className="py-3.5 px-4">Data / Hora</th>
-                      <th className="py-3.5 px-4">Tipo</th>
-                      <th className="py-3.5 px-4">Material de Enfermagem</th>
-                      <th className="py-3.5 px-4">Qtd.</th>
-                      <th className="py-3.5 px-4">Saldo (Ant. &rarr; Novo)</th>
-                      <th className="py-3.5 px-4">Lote</th>
-                      <th className="py-3.5 px-4">Responsável (RN-044)</th>
-                      <th className="py-3.5 px-4">Justificativa</th>
+                    <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-500 font-bold uppercase text-[10px]">
+                      <th className="py-3 px-4 w-10">Foto</th>
+                      <th className="py-3 px-4">Data / Hora</th>
+                      <th className="py-3 px-4">Tipo</th>
+                      <th className="py-3 px-4">Material de Enfermagem</th>
+                      <th className="py-3 px-4">Qtd.</th>
+                      <th className="py-3 px-4">Saldo (Ant. &rarr; Novo)</th>
+                      <th className="py-3 px-4">Lote</th>
+                      <th className="py-3 px-4">Responsável (RN-044)</th>
+                      <th className="py-3 px-4">Justificativa</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
                     {filteredMovements.map((m) => {
                       const isEntry = m.movement_type === 'ENTRADA';
                       const isOutput = m.movement_type === 'SAIDA';
+                      const product = products.find(p => p.id === m.product_id);
                       return (
                         <tr
                           key={m.id}
                           className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
                         >
+                          <td className="py-3 px-4">
+                            {product?.image ? (
+                              <img src={product.image} className="w-8 h-8 rounded-lg object-cover" />
+                            ) : (
+                              <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800" />
+                            )}
+                          </td>
                           <td className="py-3 px-4 text-slate-500 dark:text-slate-400">
                             {new Date(m.created_at).toLocaleString('pt-BR')}
                           </td>
@@ -461,7 +470,8 @@ export const InventoryAndHistoryView: React.FC<InventoryAndHistoryViewProps> = (
             <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800 mb-6">
               <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-400 font-bold uppercase">
+                  <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-slate-400 font-bold uppercase text-[10px]">
+                    <th className="py-3 px-4 w-10">Foto</th>
                     <th className="py-3 px-4">Código</th>
                     <th className="py-3 px-4">Material / Insumo</th>
                     <th className="py-3 px-4">Saldo do Sistema</th>
@@ -471,14 +481,25 @@ export const InventoryAndHistoryView: React.FC<InventoryAndHistoryViewProps> = (
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {inventoryItems.map((item) => (
-                    <tr
-                      key={item.product_id}
-                      className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40"
-                    >
-                      <td className="py-3 px-4 font-bold text-slate-900 dark:text-white">
-                        {item.product_code}
-                      </td>
+                  {inventoryItems.map((item) => {
+                    const product = products.find(p => p.id === item.product_id);
+                    return (
+                      <tr
+                        key={item.product_id}
+                        className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40"
+                      >
+                        <td className="py-3 px-4">
+                          {product?.image ? (
+                            <img src={product.image} className="w-8 h-8 rounded-lg object-cover" />
+                          ) : (
+                            <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-300">
+                              <ClipboardCheck className="w-4 h-4" />
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 font-bold text-slate-900 dark:text-white">
+                          {item.product_code}
+                        </td>
                       <td className="py-3 px-4 font-medium text-slate-800 dark:text-slate-200">
                         {item.product_name}
                       </td>
@@ -519,8 +540,9 @@ export const InventoryAndHistoryView: React.FC<InventoryAndHistoryViewProps> = (
                         )}
                       </td>
                     </tr>
-                  ))}
-                </tbody>
+                  );
+                })}
+              </tbody>
               </table>
             </div>
 

@@ -14,7 +14,61 @@ import {
   StockMovement,
   AuditLog,
   Settings,
+  Patrimony,
+  InstitutionalLocation as Location,
+  ClassGroup,
 } from '../types';
+
+export const initialLocations: Location[] = [
+  { id: 1, name: 'Laboratório de Enfermagem 1', building: 'Bloco A', room: 'Sala 102', active: true },
+  { id: 2, name: 'Laboratório de Enfermagem 2', building: 'Bloco A', room: 'Sala 104', active: true },
+  { id: 3, name: 'Almoxarifado Central', building: 'Bloco B', room: 'Sala 01', active: true },
+];
+
+export const initialClassGroups: ClassGroup[] = [
+  { id: 1, name: '2º Enfermagem A', course: 'Técnico em Enfermagem', year: 2026, shift: 'Matutino', status: 'Ativo', created_at: '2026-01-01T00:00:00Z' },
+  { id: 2, name: '2º Enfermagem B', course: 'Técnico em Enfermagem', year: 2026, shift: 'Vespertino', status: 'Ativo', created_at: '2026-01-01T00:00:00Z' },
+  { id: 3, name: '1º Enfermagem A', course: 'Técnico em Enfermagem', year: 2026, shift: 'Noturno', status: 'Ativo', created_at: '2026-02-01T00:00:00Z' },
+];
+
+export const initialPatrimonies: Patrimony[] = [
+  {
+    id: 1,
+    patrimony_code: 'PAT-0001',
+    name: 'Simulador de Reanimação Adulto (Manequim)',
+    description: 'Manequim articulado para treinamento de RCP e procedimentos',
+    condition: 'Excelente',
+    status: 'Disponível',
+    location_id: 1,
+    image_url: 'https://images.unsplash.com/photo-1584362917165-526a968579e8?auto=format&fit=crop&q=80&w=500',
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+  },
+  {
+    id: 2,
+    patrimony_code: 'PAT-0002',
+    name: 'Esfigmomanômetro Aneróide com Estetoscópio',
+    description: 'Aparelho de pressão manual para aulas práticas',
+    condition: 'Bom',
+    status: 'Disponível',
+    location_id: 1,
+    image_url: 'https://images.unsplash.com/photo-1584036561566-baf8f5f1b144?auto=format&fit=crop&q=80&w=500',
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+  },
+  {
+    id: 3,
+    patrimony_code: 'PAT-0003',
+    name: 'Balança Antropométrica Digital',
+    description: 'Balança com estadiômetro para avaliação física',
+    condition: 'Excelente',
+    status: 'Disponível',
+    location_id: 2,
+    image_url: 'https://images.unsplash.com/photo-1628177142898-93e36e4e3a50?auto=format&fit=crop&q=80&w=500',
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+  },
+];
 
 export const initialSettings: Settings = {
   institution_name: 'Centro Estadual de Educação Técnica Giuseppe Altoé (CEET)',
@@ -34,6 +88,7 @@ export const initialUsers: User[] = [
     user_type: 'Administrador',
     status: 'Ativo',
     active: true,
+    photo_url: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&q=80&w=300',
     cpf: '000.000.000-00',
     registration_number: 'ADM-001',
     phone: '(27) 99999-0001',
@@ -41,7 +96,7 @@ export const initialUsers: User[] = [
     function_title: 'Super Administrador Geral do Sistema',
     created_at: '2026-01-01T08:00:00Z',
     last_login: '2026-08-05T08:00:00Z',
-    password: 'Admin@123',
+    password: 'Ceet@2026!',
     must_change_password: false,
     failed_attempts: 0,
     last_password_change: '2026-01-01T08:00:00Z',
@@ -56,6 +111,7 @@ export const initialUsers: User[] = [
     user_type: 'Servidor',
     status: 'Ativo',
     active: true,
+    photo_url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=300',
     cpf: '111.111.111-11',
     registration_number: 'EST-2026',
     phone: '(27) 99999-0002',
@@ -402,8 +458,8 @@ export const initialBatches: Batch[] = [
 ];
 
 export const initialProducts: Product[] = [
-  { id: 1, code: 'CEET-001', name: 'AGUA P/INJECAO 10ML FARMACE', category_id: 4, manufacturer_id: 5, supplier_id: 1, unit_id: 10, minimum_stock: 50, current_stock: 320, location: 'Armário A1 - Prateleira 1', barcode: '7891000000001', active: true, created_at: '2026-07-31T08:00:00Z', updated_at: '2026-07-31T08:00:00Z' },
-  { id: 2, code: 'CEET-002', name: 'AGULHA DESCARTAVEL 25X0,8 CX (CX 100)', category_id: 1, manufacturer_id: 1, supplier_id: 1, unit_id: 2, minimum_stock: 30, current_stock: 180, location: 'Armário A1 - Prateleira 2', barcode: '7891000000002', active: true, created_at: '2026-07-31T08:00:00Z', updated_at: '2026-07-31T08:00:00Z' },
+  { id: 1, code: 'CEET-001', name: 'AGUA P/INJECAO 10ML FARMACE', category_id: 4, manufacturer_id: 5, supplier_id: 1, unit_id: 10, minimum_stock: 50, current_stock: 320, location_id: 3, barcode: '7891000000001', image: 'https://images.unsplash.com/photo-1587854692152-cbe660dbbb88?auto=format&fit=crop&q=80&w=500', active: true, created_at: '2026-07-31T08:00:00Z', updated_at: '2026-07-31T08:00:00Z' },
+  { id: 2, code: 'CEET-002', name: 'AGULHA DESCARTAVEL 25X0,8 CX (CX 100)', category_id: 1, manufacturer_id: 1, supplier_id: 1, unit_id: 2, minimum_stock: 30, current_stock: 180, location_id: 3, barcode: '7891000000002', image: 'https://images.unsplash.com/photo-1579152276508-41088469894e?auto=format&fit=crop&q=80&w=500', active: true, created_at: '2026-07-31T08:00:00Z', updated_at: '2026-07-31T08:00:00Z' },
   { id: 3, code: 'CEET-003', name: 'AGULHA DESCARTAVEL 30X0,80 (CX 100)', category_id: 1, manufacturer_id: 1, supplier_id: 1, unit_id: 2, minimum_stock: 30, current_stock: 150, location: 'Armário A1 - Prateleira 2', barcode: '7891000000003', active: true, created_at: '2026-07-31T08:00:00Z', updated_at: '2026-07-31T08:00:00Z' },
   { id: 4, code: 'CEET-004', name: 'AGULHA DESCARTAVEL 13X4,5 (CX 100)', category_id: 1, manufacturer_id: 1, supplier_id: 1, unit_id: 2, minimum_stock: 20, current_stock: 120, location: 'Armário A1 - Prateleira 3', barcode: '7891000000004', active: true, created_at: '2026-07-31T08:00:00Z', updated_at: '2026-07-31T08:00:00Z' },
   { id: 5, code: 'CEET-005', name: 'AGULHA DESCARTAVEL 13X0,3 (CX 100)', category_id: 1, manufacturer_id: 1, supplier_id: 1, unit_id: 2, minimum_stock: 20, current_stock: 140, location: 'Armário A1 - Prateleira 3', barcode: '7891000000005', active: true, created_at: '2026-07-31T08:00:00Z', updated_at: '2026-07-31T08:00:00Z' },

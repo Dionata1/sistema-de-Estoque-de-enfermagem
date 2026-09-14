@@ -36,6 +36,8 @@ import { DashboardStats, Product } from '../types';
 import { api } from '../services/api';
 import { exportToExcel, exportToCSV, exportToPrint } from '../utils/exportUtils';
 
+import { AIAssistant } from './common/AIAssistant';
+
 interface DashboardViewProps {
   onNavigateTab: (tab: string, filter?: string) => void;
 }
@@ -182,6 +184,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
             <RefreshCw className="w-4 h-4 text-slate-500" />
             <span>Atualizar</span>
           </button>
+          <AIAssistant 
+            category="GESTAO" 
+            context="Dashboard Gerencial & Indicadores" 
+            data={stats} 
+            buttonText="IA Gestora (Insights)"
+          />
           <button
             onClick={exportCompleteInventoryExcel}
             className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-all shadow-md shadow-emerald-500/20"
@@ -299,6 +307,61 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
             <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
               <ArrowDownRight className="w-4 h-4" /> {stats.monthly_outputs_count} Saídas
             </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Grid Secundário: Indicadores Operacionais CEET (Cap. 2 / 3 / 4) */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div 
+          onClick={() => onNavigateTab('patrimony')}
+          className="cursor-pointer p-4 bg-slate-900 text-white rounded-2xl border border-slate-800 shadow-lg flex items-center gap-4 hover:scale-[1.02] transition-transform"
+        >
+          <div className="w-12 h-12 rounded-xl bg-blue-600 flex items-center justify-center shrink-0">
+            <Activity className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Patrimônios Ativos</p>
+            <p className="text-xl font-black">{stats.total_patrimony_items || 0}</p>
+          </div>
+        </div>
+
+        <div 
+          onClick={() => onNavigateTab('loans')}
+          className="cursor-pointer p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex items-center gap-4 hover:scale-[1.02] transition-transform"
+        >
+          <div className="w-12 h-12 rounded-xl bg-amber-100 dark:bg-amber-900/30 text-amber-600 flex items-center justify-center shrink-0">
+            <RefreshCw className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Empréstimos Ativos</p>
+            <p className="text-xl font-black text-slate-900 dark:text-white">{stats.active_loans_count || 0}</p>
+          </div>
+        </div>
+
+        <div 
+          onClick={() => onNavigateTab('maintenance')}
+          className="cursor-pointer p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex items-center gap-4 hover:scale-[1.02] transition-transform"
+        >
+          <div className="w-12 h-12 rounded-xl bg-red-100 dark:bg-red-900/30 text-red-600 flex items-center justify-center shrink-0">
+            <AlertTriangle className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Manutenções Pendentes</p>
+            <p className="text-xl font-black text-slate-900 dark:text-white">{stats.pending_maintenances_count || 0}</p>
+          </div>
+        </div>
+
+        <div 
+          onClick={() => onNavigateTab('database')}
+          className="cursor-pointer p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex items-center gap-4 hover:scale-[1.02] transition-transform"
+        >
+          <div className="w-12 h-12 rounded-xl bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 flex items-center justify-center shrink-0">
+            <BarChart2 className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Status Banco JSON</p>
+            <p className="text-xl font-black text-slate-900 dark:text-white">Online</p>
           </div>
         </div>
       </div>

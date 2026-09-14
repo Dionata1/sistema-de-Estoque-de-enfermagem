@@ -29,6 +29,16 @@ import { AdminAndMasterDataView } from './components/AdminAndMasterDataView';
 import { LoginModal } from './components/LoginModal';
 import { PrivacyPolicyModal } from './components/PrivacyPolicyModal';
 
+// Novos Módulos Operacionais CEET (Cap. 2 / 3 / 4)
+import { PatrimonyView } from './components/PatrimonyView';
+import { MaintenanceView } from './components/MaintenanceView';
+import { LessonsView } from './components/LessonsView';
+import { LoansView } from './components/LoansView';
+import { OccurrencesView } from './components/OccurrencesView';
+import { SupportView } from './components/SupportView';
+import { ManufacturersView } from './components/ManufacturersView';
+import { ReportsView } from './components/ReportsView';
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [subFilter, setSubFilter] = useState<string | undefined>(undefined);
@@ -143,17 +153,26 @@ export default function App() {
           />
         );
       case 'manufacturers':
-        return (
-          <AdminAndMasterDataView
-            currentUser={currentUser}
-            activeSection="manufacturers"
-          />
-        );
+        return <ManufacturersView />;
       case 'suppliers':
         return (
           <AdminAndMasterDataView
             currentUser={currentUser}
             activeSection="suppliers"
+          />
+        );
+      case 'locations':
+        return (
+          <AdminAndMasterDataView
+            currentUser={currentUser}
+            activeSection="locations"
+          />
+        );
+      case 'units':
+        return (
+          <AdminAndMasterDataView
+            currentUser={currentUser}
+            activeSection="units"
           />
         );
       case 'entry':
@@ -188,13 +207,20 @@ export default function App() {
         );
       case 'purchases':
         return <PurchasesView />;
+      case 'patrimony':
+        return <PatrimonyView currentUser={currentUser} />;
+      case 'maintenance':
+        return <MaintenanceView currentUser={currentUser} />;
+      case 'lessons':
+        return <LessonsView currentUser={currentUser} />;
+      case 'loans':
+        return <LoansView currentUser={currentUser} />;
+      case 'occurrences':
+        return <OccurrencesView currentUser={currentUser} />;
+      case 'support':
+        return <SupportView currentUser={currentUser} />;
       case 'reports':
-        return (
-          <AdminAndMasterDataView
-            currentUser={currentUser}
-            activeSection="reports"
-          />
-        );
+        return <ReportsView onNavigateTab={handleNavigate} />;
       case 'users':
         return (
           <AdminAndMasterDataView
@@ -214,6 +240,13 @@ export default function App() {
           <AdminAndMasterDataView
             currentUser={currentUser}
             activeSection="settings"
+          />
+        );
+      case 'database':
+        return (
+          <AdminAndMasterDataView
+            currentUser={currentUser}
+            activeSection="database"
           />
         );
       default:

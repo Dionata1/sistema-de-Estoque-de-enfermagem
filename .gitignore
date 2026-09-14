@@ -1,0 +1,15 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+
+# Firebase Admin credentials
+firebase-service-account.json
+service-account.json
+
+*-firebase-adminsdk-*.json
+ceet_database.json

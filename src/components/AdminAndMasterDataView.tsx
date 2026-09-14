@@ -5,15 +5,20 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
 import {
+  AlertTriangle,
+  ArrowRightLeft,
   Building2,
   CheckCircle2,
+  Clock,
   Database,
   Download,
   FileSpreadsheet,
   FileText,
   Folder,
   Lock,
+  Package,
   Printer,
   Shield,
   Trash2,
@@ -21,6 +26,10 @@ import {
   Upload,
   UserCheck,
   Users,
+  Sparkles,
+  Loader2,
+  RefreshCw,
+  X,
 } from 'lucide-react';
 import {
   Category,
@@ -28,13 +37,19 @@ import {
   Supplier,
   User,
   AuditLog,
+  InstitutionalLocation as AppLocation,
+  Unit,
 } from '../types';
 import { api } from '../services/api';
 import { exportToExcel, exportToCSV, exportToPrint } from '../utils/exportUtils';
 
+import { AIAssistant } from './common/AIAssistant';
+
+import { ConfirmationModal } from './common/ConfirmationModal';
+
 interface AdminAndMasterDataViewProps {
   currentUser: User;
-  activeSection: 'categories' | 'manufacturers' | 'suppliers' | 'users' | 'audit' | 'settings' | 'reports';
+  activeSection: 'categories' | 'manufacturers' | 'suppliers' | 'users' | 'audit' | 'settings' | 'reports' | 'database' | 'locations' | 'units';
 }
 
 export const AdminAndMasterDataView: React.FC<AdminAndMasterDataViewProps> = ({
@@ -44,8 +59,11 @@ export const AdminAndMasterDataView: React.FC<AdminAndMasterDataViewProps> = ({
   const [categories, setCategories] = useState<Category[]>([]);
   const [manufacturers, setManufacturers] = useState<Manufacturer[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [locations, setLocations] = useState<AppLocation[]>([]);
+  const [units, setUnits] = useState<Unit[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [databaseRaw, setDatabaseRaw] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   // Estados dos Cadastros TEL-005 / TEL-006 / TEL-007
@@ -62,34 +80,60 @@ export const AdminAndMasterDataView: React.FC<AdminAndMasterDataViewProps> = ({
   const [supPhone, setSupPhone] = useState('');
   const [supEmail, setSupEmail] = useState('');
 
+  // Estados para Localizações e Unidades
+  const [locName, setLocName] = useState('');
+  const [locBuilding, setLocBuilding] = useState('');
+  const [locRoom, setLocRoom] = useState('');
+
+  const [unitName, setUnitName] = useState('');
+  const [unitAbbreviation, setUnitAbbreviation] = useState('');
+
   // Estados para Gestão de Usuários RBAC TEL-016
   const [newUserName, setNewUserName] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserCpf, setNewUserCpf] = useState('');
+  const [newUserPhone, setNewUserPhone] = useState('');
+  const [newUserRegistration, setNewUserRegistration] = useState('');
+  const [newUserFunction, setNewUserFunction] = useState('');
+  const [newUserDepartment, setNewUserDepartment] = useState('');
+  const [newUserStatus, setNewUserStatus] = useState<'Ativo' | 'Inativo' | 'Bloqueado'>('Ativo');
   const [newUserRole, setNewUserRole] = useState<'ADMIN' | 'ESTOQUE' | 'PROFESSOR' | 'COORDENACAO'>('ESTOQUE');
   const [newUserType, setNewUserType] = useState<'Servidor' | 'Professor' | 'Funcionário' | 'Estagiário' | 'Técnico'>('Servidor');
   const [newUserTempPass, setNewUserTempPass] = useState('Ceet@2026!');
+  const [newUserPhoto, setNewUserPhoto] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
+  const userPhotoInputRef = React.useRef<HTMLInputElement>(null);
+  const backupInputRef = React.useRef<HTMLInputElement>(null);
 
   const [formError, setFormError] = useState('');
   const [formSuccess, setFormSuccess] = useState('');
+  const [showResetStockModal, setShowResetStockModal] = useState(false);
 
-  const canEdit = currentUser.role === 'ADMIN' || currentUser.role === 'ESTOQUE';
+  const canEdit = ['ADMIN', 'ESTOQUE', 'PROFESSOR', 'COORDENACAO'].includes(currentUser.role);
   const isAdmin = currentUser.role === 'ADMIN';
+  const canManageStock = ['ADMIN', 'ESTOQUE', 'PROFESSOR', 'COORDENACAO'].includes(currentUser.role);
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const [cats, mans, sups, usrs, logs] = await Promise.all([
+      const [cats, mans, sups, usrs, logs, dbBackup, locs, unis] = await Promise.all([
         api.getCategories(),
         api.getManufacturers(),
         api.getSuppliers(),
         api.getUsers(),
         isAdmin ? api.getAuditLogs() : Promise.resolve([]),
+        isAdmin && activeSection === 'database' ? api.exportDatabaseBackup() : Promise.resolve(null),
+        api.getLocations(),
+        api.getUnits(),
       ]);
       setCategories(cats);
       setManufacturers(mans);
       setSuppliers(sups);
       setUsers(usrs);
       setAuditLogs(logs);
+      setLocations(locs);
+      setUnits(unis);
+      if (dbBackup) setDatabaseRaw(dbBackup.database);
     } catch (err) {
       console.error('Erro ao carregar cadastros complementares CEET:', err);
     } finally {
@@ -100,6 +144,48 @@ export const AdminAndMasterDataView: React.FC<AdminAndMasterDataViewProps> = ({
   useEffect(() => {
     loadData();
   }, [activeSection]);
+
+  const handleUserPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploading(true);
+    try {
+      const res = await api.upload(file, currentUser.id);
+      if (res.success && res.data) {
+        setNewUserPhoto(res.data.url);
+      }
+    } catch (err) {
+      console.error('Erro no upload da foto do usuário:', err);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleImportBackup = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!confirm('ATENÇÃO: Restaurar um backup substituirá TODOS os dados atuais do sistema. Deseja continuar?')) {
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const json = JSON.parse(event.target?.result as string);
+        const res = await api.restoreDatabaseBackup(json);
+        if (res.success) {
+          alert('✅ Banco de dados restaurado com sucesso! A página será recarregada.');
+          window.location.reload();
+        } else {
+          alert('❌ Erro ao restaurar backup: ' + res.message);
+        }
+      } catch (err) {
+        alert('❌ Arquivo de backup inválido.');
+      }
+    };
+    reader.readAsText(file);
+  };
 
   // CADASTRO DE CATEGORIA (TEL-005 / RF-002)
   const handleSaveCategory = async (e: React.FormEvent) => {
@@ -124,16 +210,22 @@ export const AdminAndMasterDataView: React.FC<AdminAndMasterDataViewProps> = ({
   const handleSaveManufacturer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!manName.trim()) return;
+    setFormError('');
+    setFormSuccess('');
     try {
-      await api.createManufacturer({
+      const res = await api.createManufacturer({
         name: manName.trim(),
         country: manCountry,
       });
-      setManName('');
-      setFormSuccess('✅ Fabricante cadastrado com sucesso!');
-      await loadData();
+      if (res.success) {
+        setManName('');
+        setFormSuccess('✅ Fabricante cadastrado com sucesso!');
+        await loadData();
+      } else {
+        setFormError(res.message || 'Erro ao cadastrar fabricante.');
+      }
     } catch (err) {
-      setFormError('Erro ao cadastrar fabricante.');
+      setFormError('Erro de conexão ao cadastrar fabricante.');
     }
   };
 
@@ -187,14 +279,28 @@ export const AdminAndMasterDataView: React.FC<AdminAndMasterDataViewProps> = ({
       const res = await api.createUser({
         name: newUserName.trim(),
         email: newUserEmail.trim(),
+        cpf: newUserCpf.trim() || undefined,
+        phone: newUserPhone.trim() || undefined,
+        registration_number: newUserRegistration.trim() || undefined,
+        function_title: newUserFunction.trim() || undefined,
+        department: newUserDepartment.trim() || undefined,
         role: newUserRole,
         user_type: newUserType,
+        status: newUserStatus,
         temporary_password: newUserTempPass.trim() || 'Ceet@2026!',
+        photo_url: newUserPhoto || undefined,
       });
       if (res.success) {
         setNewUserName('');
         setNewUserEmail('');
+        setNewUserCpf('');
+        setNewUserPhone('');
+        setNewUserRegistration('');
+        setNewUserFunction('');
+        setNewUserDepartment('');
+        setNewUserStatus('Ativo');
         setNewUserTempPass('Ceet@2026!');
+        setNewUserPhoto('');
         setFormSuccess(`✅ Usuário ${res.data?.name} cadastrado com sucesso! Senha temporária: "${res.data?.temporary_password || 'Ceet@2026!'}"`);
         await loadData();
       } else {
@@ -202,6 +308,45 @@ export const AdminAndMasterDataView: React.FC<AdminAndMasterDataViewProps> = ({
       }
     } catch (err: any) {
       setFormError(err.message || 'Erro ao cadastrar usuário.');
+    }
+  };
+
+  // CADASTRO DE LOCALIZAÇÃO / SETOR (RN-LOCATION)
+  const handleSaveLocation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!locName.trim()) return;
+    try {
+      await api.createLocation({
+        name: locName.trim(),
+        building: locBuilding.trim(),
+        room: locRoom.trim(),
+        active: true,
+      });
+      setLocName('');
+      setLocBuilding('');
+      setLocRoom('');
+      setFormSuccess('✅ Localização/Setor cadastrado com sucesso!');
+      await loadData();
+    } catch (err) {
+      setFormError('Erro ao cadastrar localização.');
+    }
+  };
+
+  // CADASTRO DE UNIDADE DE MEDIDA (RN-UNIT)
+  const handleSaveUnit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!unitName.trim() || !unitAbbreviation.trim()) return;
+    try {
+      await api.createUnit({
+        name: unitName.trim(),
+        abbreviation: unitAbbreviation.trim(),
+      });
+      setUnitName('');
+      setUnitAbbreviation('');
+      setFormSuccess('✅ Unidade de medida cadastrada com sucesso!');
+      await loadData();
+    } catch (err) {
+      setFormError('Erro ao cadastrar unidade.');
     }
   };
 
@@ -220,6 +365,29 @@ export const AdminAndMasterDataView: React.FC<AdminAndMasterDataViewProps> = ({
       link.click();
     } catch (err) {
       alert('Falha ao gerar backup oficial.');
+    }
+  };
+
+  const handleResetStock = async () => {
+    if (!canManageStock) return;
+    setShowResetStockModal(true);
+  };
+
+  const executeResetStock = async () => {
+    setShowResetStockModal(false);
+    setLoading(true);
+    try {
+      const res = await api.resetStock();
+      if (res.success) {
+        setFormSuccess('✅ Estoque resetado com sucesso! Todos os produtos e históricos foram removidos.');
+        await loadData();
+      } else {
+        setFormError('Erro ao resetar estoque: ' + res.message);
+      }
+    } catch (err) {
+      setFormError('Erro de conexão ao tentar resetar estoque.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -242,7 +410,10 @@ export const AdminAndMasterDataView: React.FC<AdminAndMasterDataViewProps> = ({
             {activeSection === 'users' && 'Usuários & Perfis RBAC (TEL-016)'}
             {activeSection === 'audit' && 'Auditoria & Segurança de Ações (RF-043)'}
             {activeSection === 'settings' && 'Configurações & Backup (TEL-015)'}
+            {activeSection === 'database' && 'Explorador de Dados CEET (JSON)'}
             {activeSection === 'reports' && 'Relatórios e Exportações Institucionais'}
+            {activeSection === 'locations' && 'Localizações e Setores (Laboratórios)'}
+            {activeSection === 'units' && 'Unidades de Medida Cadastradas'}
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400">
             {activeSection === 'categories' &&
@@ -257,8 +428,14 @@ export const AdminAndMasterDataView: React.FC<AdminAndMasterDataViewProps> = ({
               'Registro imutável de quem criou, alterou, movimentou ou inativou registros no sistema (RN-043).'}
             {activeSection === 'settings' &&
               'Realize backup completo do banco de dados em JSON e gerencie parâmetros da plataforma.'}
+            {activeSection === 'database' &&
+              'Visualize a estrutura bruta do banco de dados JSON persistido no servidor.'}
             {activeSection === 'reports' &&
               'Gere relatórios executivos de consumo por disciplina, validade e situação de estoque.'}
+            {activeSection === 'locations' &&
+              'Cadastre os laboratórios e armários para rastrear de onde vem e para onde vai cada material.'}
+            {activeSection === 'units' &&
+              'Defina as unidades de medida oficiais (Frasco, Unidade, Caixa) para padronização do estoque.'}
           </p>
         </div>
       </div>
@@ -271,6 +448,154 @@ export const AdminAndMasterDataView: React.FC<AdminAndMasterDataViewProps> = ({
       {formSuccess && (
         <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 text-xs text-emerald-800 dark:text-emerald-300 font-bold">
           {formSuccess}
+        </div>
+      )}
+
+      {/* SEÇÃO: LOCALIZAÇÕES (SETORS) */}
+      {activeSection === 'locations' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs">
+            <h3 className="text-base font-bold text-slate-900 dark:text-white mb-4">
+              Nova Localização / Setor
+            </h3>
+            <form onSubmit={handleSaveLocation} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Nome do Local *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={locName}
+                  onChange={(e) => setLocName(e.target.value)}
+                  placeholder="Ex: Laboratório de Práticas I"
+                  className="w-full px-3 py-2 rounded-xl text-xs border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Bloco / Prédio
+                  </label>
+                  <input
+                    type="text"
+                    value={locBuilding}
+                    onChange={(e) => setLocBuilding(e.target.value)}
+                    placeholder="Ex: Bloco A"
+                    className="w-full px-3 py-2 rounded-xl text-xs border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Sala
+                  </label>
+                  <input
+                    type="text"
+                    value={locRoom}
+                    onChange={(e) => setLocRoom(e.target.value)}
+                    placeholder="Ex: Sala 102"
+                    className="w-full px-3 py-2 rounded-xl text-xs border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+                  />
+                </div>
+              </div>
+              <button
+                type="submit"
+                className="w-full py-2.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-md"
+              >
+                Cadastrar Localização
+              </button>
+            </form>
+          </div>
+
+          <div className="lg:col-span-2 bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs">
+            <h3 className="text-base font-bold text-slate-900 dark:text-white mb-4">
+              Locais e Setores de Destino ({locations.length})
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {locations.map((l) => (
+                <div
+                  key={l.id}
+                  className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400">
+                      <Folder className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-slate-900 dark:text-white">
+                        {l.name}
+                      </p>
+                      <p className="text-[11px] text-slate-400">{l.building} &bull; {l.room}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SEÇÃO: UNIDADES DE MEDIDA */}
+      {activeSection === 'units' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs">
+            <h3 className="text-base font-bold text-slate-900 dark:text-white mb-4">
+              Nova Unidade de Medida
+            </h3>
+            <form onSubmit={handleSaveUnit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Nome da Unidade *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={unitName}
+                  onChange={(e) => setUnitName(e.target.value)}
+                  placeholder="Ex: Frasco"
+                  className="w-full px-3 py-2 rounded-xl text-xs border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Sigla / Abreviação *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={unitAbbreviation}
+                  onChange={(e) => setUnitAbbreviation(e.target.value)}
+                  placeholder="Ex: FR"
+                  className="w-full px-3 py-2 rounded-xl text-xs border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-bold uppercase"
+                />
+              </div>
+              <button
+                type="submit"
+                className="w-full py-2.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-md"
+              >
+                Cadastrar Unidade
+              </button>
+            </form>
+          </div>
+
+          <div className="lg:col-span-2 bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs">
+            <h3 className="text-base font-bold text-slate-900 dark:text-white mb-4">
+              Unidades Disponíveis ({units.length})
+            </h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {units.map((u) => (
+                <div
+                  key={u.id}
+                  className="p-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 text-center"
+                >
+                  <p className="text-xs font-bold text-blue-600 dark:text-blue-400">
+                    {u.abbreviation}
+                  </p>
+                  <p className="text-[10px] text-slate-500">{u.name}</p>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
@@ -347,6 +672,76 @@ export const AdminAndMasterDataView: React.FC<AdminAndMasterDataViewProps> = ({
                         {c.name}
                       </p>
                       <p className="text-[11px] text-slate-400">{c.description || 'Sem descrição'}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SEÇÃO: FABRICANTES (TEL-006) */}
+      {activeSection === 'manufacturers' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs">
+            <h3 className="text-base font-bold text-slate-900 dark:text-white mb-4">
+              Novo Fabricante
+            </h3>
+            <form onSubmit={handleSaveManufacturer} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Nome do Fabricante *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={manName}
+                  onChange={(e) => setManName(e.target.value)}
+                  placeholder="Ex: BD Medical"
+                  className="w-full px-3 py-2 rounded-xl text-xs border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Origem / País
+                </label>
+                <input
+                  type="text"
+                  value={manCountry}
+                  onChange={(e) => setManCountry(e.target.value)}
+                  placeholder="Ex: Brasil, EUA, Alemanha"
+                  className="w-full px-3 py-2 rounded-xl text-xs border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+                />
+              </div>
+              <button
+                type="submit"
+                className="w-full py-2.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                Cadastrar Fabricante (RF-003)
+              </button>
+            </form>
+          </div>
+
+          <div className="lg:col-span-2 bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs">
+            <h3 className="text-base font-bold text-slate-900 dark:text-white mb-4">
+              Fabricantes Homologados ({manufacturers.length})
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {manufacturers.map((m) => (
+                <div
+                  key={m.id}
+                  className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400">
+                      <Building2 className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-slate-900 dark:text-white">
+                        {m.name}
+                      </p>
+                      <p className="text-[11px] text-slate-400">{m.country || 'N/A'}</p>
                     </div>
                   </div>
                 </div>
@@ -502,6 +897,26 @@ export const AdminAndMasterDataView: React.FC<AdminAndMasterDataViewProps> = ({
               </p>
 
               <form onSubmit={handleSaveUser} className="space-y-3">
+                <div className="flex justify-center mb-4">
+                  <div className="relative group">
+                    <div className="w-20 h-20 rounded-2xl bg-slate-100 dark:bg-slate-800 border-2 border-dashed border-slate-200 dark:border-slate-700 overflow-hidden flex items-center justify-center">
+                      {newUserPhoto ? (
+                        <img src={newUserPhoto} className="w-full h-full object-cover" />
+                      ) : (
+                        <Users className="w-8 h-8 text-slate-300" />
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => userPhotoInputRef.current?.click()}
+                      className="absolute inset-0 bg-black/40 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-2xl"
+                    >
+                      <Upload className="w-5 h-5" />
+                    </button>
+                    <input type="file" ref={userPhotoInputRef} className="hidden" accept="image/*" onChange={handleUserPhotoUpload} />
+                  </div>
+                </div>
+
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                     Nome Completo *
@@ -528,6 +943,47 @@ export const AdminAndMasterDataView: React.FC<AdminAndMasterDataViewProps> = ({
                     placeholder="maria.silva@ceet.edu.br"
                     className="w-full px-3 py-2 rounded-xl text-xs border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:ring-2 focus:ring-blue-500"
                   />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">CPF</label>
+                    <input type="text" value={newUserCpf} onChange={(e) => setNewUserCpf(e.target.value)} placeholder="000.000.000-00"
+                      className="w-full px-3 py-2 rounded-xl text-xs border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Telefone</label>
+                    <input type="text" value={newUserPhone} onChange={(e) => setNewUserPhone(e.target.value)} placeholder="(28) 99999-9999"
+                      className="w-full px-3 py-2 rounded-xl text-xs border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Matrícula</label>
+                    <input type="text" value={newUserRegistration} onChange={(e) => setNewUserRegistration(e.target.value)} placeholder="Matrícula institucional"
+                      className="w-full px-3 py-2 rounded-xl text-xs border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Cargo</label>
+                    <input type="text" value={newUserFunction} onChange={(e) => setNewUserFunction(e.target.value)} placeholder="Ex: Técnico de Enfermagem"
+                      className="w-full px-3 py-2 rounded-xl text-xs border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Setor</label>
+                    <input type="text" value={newUserDepartment} onChange={(e) => setNewUserDepartment(e.target.value)} placeholder="Ex: Enfermagem"
+                      className="w-full px-3 py-2 rounded-xl text-xs border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Status inicial</label>
+                    <select value={newUserStatus} onChange={(e) => setNewUserStatus(e.target.value as any)}
+                      className="w-full px-3 py-2 rounded-xl text-xs border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-semibold">
+                      <option value="Ativo">Ativo</option>
+                      <option value="Inativo">Inativo</option>
+                      <option value="Bloqueado">Bloqueado</option>
+                    </select>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
@@ -721,15 +1177,23 @@ export const AdminAndMasterDataView: React.FC<AdminAndMasterDataViewProps> = ({
                 Registros automáticos imutáveis de todas as operações realizadas na plataforma CEET.
               </p>
             </div>
-            <button
-              onClick={() =>
-                exportToExcel(auditLogs, 'Auditoria_Seguranca_CEET', 'Auditoria')
-              }
-              className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white"
-            >
-              <FileSpreadsheet className="w-4 h-4" />
-              <span>Exportar Auditoria</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <AIAssistant 
+                category="AUDITORIA" 
+                context="Auditoria e Segurança de Ações" 
+                data={auditLogs} 
+                buttonText="IA Auditor"
+              />
+              <button
+                onClick={() =>
+                  exportToExcel(auditLogs, 'Auditoria_Seguranca_CEET', 'Auditoria')
+                }
+                className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition-all shadow-md shadow-emerald-500/20"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                <span>Exportar Auditoria</span>
+              </button>
+            </div>
           </div>
 
           <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800">
@@ -747,7 +1211,7 @@ export const AdminAndMasterDataView: React.FC<AdminAndMasterDataViewProps> = ({
                 {auditLogs.map((log) => (
                   <tr key={log.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
                     <td className="py-3 px-4 text-slate-500">
-                      {new Date(log.timestamp).toLocaleString('pt-BR')}
+                      {new Date(log.created_at).toLocaleString('pt-BR')}
                     </td>
                     <td className="py-3 px-4 font-bold text-slate-900 dark:text-white">
                       {log.user_name} ({log.user_role})
@@ -758,7 +1222,7 @@ export const AdminAndMasterDataView: React.FC<AdminAndMasterDataViewProps> = ({
                       </span>
                     </td>
                     <td className="py-3 px-4 font-semibold text-slate-700 dark:text-slate-300">
-                      {log.target}
+                      {log.entity}
                     </td>
                     <td className="py-3 px-4 text-slate-500 max-w-[280px] truncate">
                       {log.details}
@@ -767,6 +1231,231 @@ export const AdminAndMasterDataView: React.FC<AdminAndMasterDataViewProps> = ({
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* SEÇÃO: RELATÓRIOS E EXPORTAÇÕES INSTITUCIONAIS */}
+      {activeSection === 'reports' && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col items-center text-center">
+              <div className="p-4 rounded-2xl bg-blue-100 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 mb-4">
+                <Package className="w-8 h-8" />
+              </div>
+              <h4 className="text-sm font-bold text-slate-900 dark:text-white">Inventário Geral</h4>
+              <p className="text-[11px] text-slate-500 mt-1 mb-4">Lista completa de produtos e saldos atuais.</p>
+              <button
+                onClick={async () => {
+                  const data = await api.getProducts();
+                  exportToExcel(data, 'Inventario_Geral_CEET', 'Produtos');
+                }}
+                className="w-full py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-[11px] font-bold text-slate-700 dark:text-slate-300 flex items-center justify-center gap-2"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                Gerar Excel
+              </button>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col items-center text-center">
+              <div className="p-4 rounded-2xl bg-amber-100 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 mb-4">
+                <AlertTriangle className="w-8 h-8" />
+              </div>
+              <h4 className="text-sm font-bold text-slate-900 dark:text-white">Estoque Crítico</h4>
+              <p className="text-[11px] text-slate-500 mt-1 mb-4">Produtos com saldo abaixo do mínimo (RN-018).</p>
+              <button
+                onClick={async () => {
+                  const data = await api.getProducts();
+                  const filtered = data.filter(p => p.current_stock <= p.minimum_stock);
+                  exportToExcel(filtered, 'Estoque_Critico_CEET', 'Critico');
+                }}
+                className="w-full py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-[11px] font-bold text-slate-700 dark:text-slate-300 flex items-center justify-center gap-2"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                Gerar Excel
+              </button>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col items-center text-center">
+              <div className="p-4 rounded-2xl bg-red-100 dark:bg-red-950/40 text-red-600 dark:text-red-400 mb-4">
+                <Clock className="w-8 h-8" />
+              </div>
+              <h4 className="text-sm font-bold text-slate-900 dark:text-white">Lotes a Vencer</h4>
+              <p className="text-[11px] text-slate-500 mt-1 mb-4">Controle de validade (30 dias) - RN-011/RN-012.</p>
+              <button
+                onClick={async () => {
+                  const data = await api.getProducts();
+                  const expiring: any[] = [];
+                  data.forEach(p => {
+                    p.batches?.forEach(b => {
+                      const exp = new Date(b.expiration_date);
+                      const diff = (exp.getTime() - new Date().getTime()) / (1000 * 3600 * 24);
+                      if (diff <= 30) {
+                        expiring.push({
+                          Código: p.code,
+                          Produto: p.name,
+                          Lote: b.batch_number,
+                          Vencimento: b.expiration_date,
+                          Saldo: b.quantity,
+                          Dias: Math.ceil(diff)
+                        });
+                      }
+                    });
+                  });
+                  exportToExcel(expiring, 'Lotes_Vencimento_CEET', 'Validade');
+                }}
+                className="w-full py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-[11px] font-bold text-slate-700 dark:text-slate-300 flex items-center justify-center gap-2"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                Gerar Excel
+              </button>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col items-center text-center">
+              <div className="p-4 rounded-2xl bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 mb-4">
+                <ArrowRightLeft className="w-8 h-8" />
+              </div>
+              <h4 className="text-sm font-bold text-slate-900 dark:text-white">Movimentação</h4>
+              <p className="text-[11px] text-slate-500 mt-1 mb-4">Histórico rastreável de entradas e saídas (RN-008).</p>
+              <button
+                onClick={async () => {
+                  const data = await api.getStockMovements();
+                  exportToExcel(data, 'Movimentacao_Estoque_CEET', 'Movimentos');
+                }}
+                className="w-full py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-[11px] font-bold text-slate-700 dark:text-slate-300 flex items-center justify-center gap-2"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                Gerar Excel
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 p-8 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm text-center">
+            <h3 className="text-base font-bold text-slate-900 dark:text-white mb-2">Relatório Gerencial de Impressão</h3>
+            <p className="text-xs text-slate-500 mb-6">Gere uma via impressa (ou PDF) com o timbre oficial para conferência física no Almoxarifado.</p>
+            <div className="flex flex-wrap justify-center gap-3">
+              <button
+                onClick={async () => {
+                  const data = await api.getProducts();
+                  const html = `
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Código</th>
+                          <th>Produto</th>
+                          <th>Categoria</th>
+                          <th>Saldo Atual</th>
+                          <th>Unidade</th>
+                          <th>Mínimo</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        ${data.map(p => `
+                          <tr>
+                            <td>${p.code}</td>
+                            <td>${p.name}</td>
+                            <td>${p.category_name || 'N/A'}</td>
+                            <td>${p.current_stock}</td>
+                            <td>${p.unit_abbreviation || 'un'}</td>
+                            <td>${p.minimum_stock}</td>
+                          </tr>
+                        `).join('')}
+                      </tbody>
+                    </table>
+                  `;
+                  exportToPrint('Relatório de Inventário Geral para Conferência', html);
+                }}
+                className="px-6 py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-blue-500/20"
+              >
+                <Printer className="w-4 h-4" />
+                Imprimir Inventário Atual
+              </button>
+              
+              <button
+                onClick={async () => {
+                  const data = await api.getSuppliers();
+                  const html = `
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Nome Fantasia</th>
+                          <th>Razão Social</th>
+                          <th>CNPJ</th>
+                          <th>E-mail</th>
+                          <th>Telefone</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        ${data.map(s => `
+                          <tr>
+                            <td>${s.trade_name}</td>
+                            <td>${s.corporate_name}</td>
+                            <td>${s.cnpj}</td>
+                            <td>${s.email || '-'}</td>
+                            <td>${s.phone || '-'}</td>
+                          </tr>
+                        `).join('')}
+                      </tbody>
+                    </table>
+                  `;
+                  exportToPrint('Relação de Fornecedores Homologados CEET', html);
+                }}
+                className="px-6 py-3 rounded-2xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold flex items-center gap-2"
+              >
+                <Truck className="w-4 h-4" />
+                Imprimir Fornecedores
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SEÇÃO: EXPLORADOR DE BANCO DE DADOS (JSON) */}
+      {activeSection === 'database' && isAdmin && (
+        <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <Database className="w-5 h-5 text-indigo-600" />
+              <span>Conteúdo Bruto do Banco de Dados (ceet_database.json)</span>
+            </h3>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={loadData}
+                className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
+                title="Recarregar dados do servidor"
+              >
+                <RefreshCw className="w-4 h-4" />
+              </button>
+              <button
+                onClick={handleExportBackup}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                <Download className="w-4 h-4" />
+                <span>Download JSON</span>
+              </button>
+            </div>
+          </div>
+          
+          <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 overflow-hidden">
+            <div className="max-h-[600px] overflow-y-auto custom-scrollbar">
+              <pre className="text-[11px] font-mono text-emerald-400 leading-relaxed">
+                {databaseRaw ? JSON.stringify(databaseRaw, null, 2) : 'Carregando dados estruturais...'}
+              </pre>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { label: 'Usuários', count: databaseRaw?.users?.length || 0 },
+              { label: 'Produtos', count: databaseRaw?.products?.length || 0 },
+              { label: 'Movimentações', count: databaseRaw?.movements?.length || 0 },
+              { label: 'Logs Auditoria', count: databaseRaw?.auditLogs?.length || 0 },
+            ].map((stat, i) => (
+              <div key={i} className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+                <p className="text-[10px] font-bold text-slate-400 uppercase">{stat.label}</p>
+                <p className="text-lg font-bold text-slate-900 dark:text-white">{stat.count}</p>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -782,14 +1471,32 @@ export const AdminAndMasterDataView: React.FC<AdminAndMasterDataViewProps> = ({
             <p className="text-xs text-slate-500">
               Exporte todo o histórico, catálogo de produtos, fornecedores e estoques em formato JSON padronizado.
             </p>
-            <div className="pt-2">
+            <div className="pt-2 flex flex-wrap gap-3">
               <button
                 onClick={handleExportBackup}
                 className="flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20"
               >
                 <Download className="w-4 h-4" />
-                <span>Exportar Backup Institucional CEET (JSON)</span>
+                <span>Exportar Backup Institucional (JSON)</span>
               </button>
+              
+              <button
+                onClick={() => backupInputRef.current?.click()}
+                className="flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all"
+              >
+                <Upload className="w-4 h-4" />
+                <span>Restaurar Backup</span>
+              </button>
+              <input type="file" ref={backupInputRef} className="hidden" accept=".json" onChange={handleImportBackup} />
+
+              <button
+                onClick={handleResetStock}
+                className="flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-bold bg-white dark:bg-slate-900 hover:bg-red-50 dark:hover:bg-red-950/20 text-red-600 border border-red-200 dark:border-red-900/50 transition-all shadow-xs"
+              >
+                <RefreshCw className="w-4 h-4" />
+                <span>🔄 Resetar Estoque</span>
+              </button>
+
             </div>
           </div>
 
@@ -815,6 +1522,16 @@ export const AdminAndMasterDataView: React.FC<AdminAndMasterDataViewProps> = ({
           </div>
         </div>
       )}
+      {/* MODALS DE CONFIRMAÇÃO */}
+      <ConfirmationModal
+        isOpen={showResetStockModal}
+        onClose={() => setShowResetStockModal(false)}
+        onConfirm={executeResetStock}
+        title="Resetar Estoque"
+        message="ATENÇÃO: Deseja realizar o RESET DO ESTOQUE? Isso excluirá TODOS os produtos cadastrados, lotes, patrimônios e históricos de movimentação para um recomeço limpo. Esta ação não pode ser desfeita."
+        confirmText="Resetar Estoque"
+        type="warning"
+      />
     </div>
   );
 };

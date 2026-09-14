@@ -25,6 +25,7 @@ import {
   StockOutputItem,
   User,
   Batch,
+  InstitutionalLocation as AppLocation,
 } from '../types';
 import { api } from '../services/api';
 
@@ -42,6 +43,7 @@ export const StockOperationsView: React.FC<StockOperationsViewProps> = ({
   const [activeTab, setActiveTab] = useState<'entry' | 'output'>(initialMode);
   const [products, setProducts] = useState<Product[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [appLocations, setAppLocations] = useState<AppLocation[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Estados de ENTRADA (TEL-008 / RF-005)
@@ -56,8 +58,8 @@ export const StockOperationsView: React.FC<StockOperationsViewProps> = ({
   const [entryObs, setEntryObs] = useState('');
 
   // Estados de SAÍDA (TEL-009 / RF-006)
-  const [destSector, setDestSector] = useState('Laboratório de Práticas de Enfermagem I');
-  const [outputReason, setOutputReason] = useState('Consumo em aula prática de punção venosa e curativos');
+  const [destLocationId, setDestLocationId] = useState<number>(1);
+  const [outputReason, setOutputReason] = useState('Consumo em aula prática de laboratório');
   const [outputItems, setOutputItems] = useState<StockOutputItem[]>([]);
   const [outputProductId, setOutputProductId] = useState<number>(1);
   const [outputQty, setOutputQty] = useState<number>(5);
@@ -69,15 +71,24 @@ export const StockOperationsView: React.FC<StockOperationsViewProps> = ({
   const loadData = async () => {
     setLoading(true);
     try {
-      const [prods, sups] = await Promise.all([api.getProducts(), api.getSuppliers()]);
+      const [prods, sups, locs] = await Promise.all([
+        api.getProducts(),
+        api.getSuppliers(),
+        api.getLocations()
+      ]);
       setProducts(prods);
       setSuppliers(sups);
+      setAppLocations(locs);
+
       if (prods.length > 0) {
         setEntryProductId(prods[0].id);
         setOutputProductId(prods[0].id);
       }
       if (sups.length > 0) {
         setSupplierId(sups[0].id);
+      }
+      if (locs.length > 0) {
+        setDestLocationId(locs[0].id);
       }
     } catch (err) {
       console.error('Erro ao carregar dados para movimentação CEET:', err);
@@ -93,16 +104,6 @@ export const StockOperationsView: React.FC<StockOperationsViewProps> = ({
   useEffect(() => {
     setActiveTab(initialMode);
   }, [initialMode]);
-
-  // SETORES INSTITUCIONAIS DO CEET
-  const ceetSectors = [
-    'Laboratório de Práticas de Enfermagem I',
-    'Laboratório de Simulação Clínica e UTI',
-    'Ambulatório de Especialidades CEET',
-    'Estágio Hospitalar Supervisionado',
-    'Aula Prática de Farmacologia e Cálculos',
-    'Enfermagem Pediátrica / Maternidade',
-  ];
 
   // ADICIONAR ITEM À LISTA DE ENTRADA
   const handleAddEntryItem = () => {
@@ -218,8 +219,9 @@ export const StockOperationsView: React.FC<StockOperationsViewProps> = ({
     }
 
     try {
+      const destLocation = appLocations.find(l => l.id === destLocationId);
       const res = await api.createStockOutput({
-        destination_sector: destSector,
+        destination_sector: destLocation?.name || 'Setor Não Identificado',
         reason: outputReason,
         items: outputItems,
       });
@@ -233,7 +235,7 @@ export const StockOperationsView: React.FC<StockOperationsViewProps> = ({
       }
 
       setFormSuccess(
-        `✅ Saída de estoque concluída com sucesso (${outputItems.length} materiais enviados para ${destSector})!`
+        `✅ Saída de estoque concluída com sucesso (${outputItems.length} materiais enviados para ${destLocation?.name})!`
       );
       setOutputItems([]);
       await loadData();
@@ -472,35 +474,47 @@ export const StockOperationsView: React.FC<StockOperationsViewProps> = ({
                 </div>
               ) : (
                 <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                  {entryItems.map((item, idx) => (
-                    <div
-                      key={idx}
-                      className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 flex items-center justify-between"
-                    >
-                      <div>
-                        <p className="text-xs font-bold text-slate-900 dark:text-white">
-                          [{item.product_code}] {item.product_name}
-                        </p>
-                        <p className="text-[11px] text-slate-500">
-                          Lote: {item.batch_number} &bull; Validade: {item.expiration_date}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-blue-600 dark:text-blue-400">
-                          +{item.quantity} un
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setEntryItems(entryItems.filter((_, i) => i !== idx))
-                          }
-                          className="text-slate-400 hover:text-red-500"
+                    {entryItems.map((item, idx) => {
+                      const product = products.find(p => p.id === item.product_id);
+                      return (
+                        <div
+                          key={idx}
+                          className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 flex items-center gap-3"
                         >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                          <div className="w-10 h-10 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 shrink-0">
+                            {product?.image ? (
+                              <img src={product.image} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-slate-300">
+                                <Plus className="w-4 h-4" />
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-xs font-bold text-slate-900 dark:text-white">
+                              [{item.product_code}] {item.product_name}
+                            </p>
+                            <p className="text-[11px] text-slate-500">
+                              Lote: {item.batch_number} &bull; Validade: {item.expiration_date}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-blue-600 dark:text-blue-400">
+                              +{item.quantity} un
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setEntryItems(entryItems.filter((_, i) => i !== idx))
+                              }
+                              className="text-slate-400 hover:text-red-500"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
                 </div>
               )}
             </div>
@@ -530,23 +544,23 @@ export const StockOperationsView: React.FC<StockOperationsViewProps> = ({
               Toda saída consome prioritariamente o lote com vencimento mais próximo segundo a regra FEFO/FIFO (RN-016).
             </p>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Setor / Laboratório de Destino *
-                </label>
-                <select
-                  value={destSector}
-                  onChange={(e) => setDestSector(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl text-xs border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-semibold"
-                >
-                  {ceetSectors.map((s, idx) => (
-                    <option key={idx} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Setor / Laboratório de Destino *
+                  </label>
+                  <select
+                    value={destLocationId}
+                    onChange={(e) => setDestLocationId(Number(e.target.value))}
+                    className="w-full px-3 py-2.5 rounded-xl text-xs border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-semibold"
+                  >
+                    {appLocations.map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
@@ -661,35 +675,47 @@ export const StockOperationsView: React.FC<StockOperationsViewProps> = ({
                 </div>
               ) : (
                 <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                  {outputItems.map((item, idx) => (
-                    <div
-                      key={idx}
-                      className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 flex items-center justify-between"
-                    >
-                      <div>
-                        <p className="text-xs font-bold text-slate-900 dark:text-white">
-                          [{item.product_code}] {item.product_name}
-                        </p>
-                        <p className="text-[11px] text-slate-500">
-                          Política: {item.batch_number}
-                        </p>
+                  {outputItems.map((item, idx) => {
+                    const product = products.find(p => p.id === item.product_id);
+                    return (
+                      <div
+                        key={idx}
+                        className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 flex items-center gap-3"
+                      >
+                        <div className="w-10 h-10 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 shrink-0">
+                          {product?.image ? (
+                            <img src={product.image} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-slate-300">
+                              <Plus className="w-4 h-4" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-xs font-bold text-slate-900 dark:text-white">
+                            [{item.product_code}] {item.product_name}
+                          </p>
+                          <p className="text-[11px] text-slate-500">
+                            Política: {item.batch_number}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-amber-600 dark:text-amber-400">
+                            -{item.quantity} un
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setOutputItems(outputItems.filter((_, i) => i !== idx))
+                            }
+                            className="text-slate-400 hover:text-red-500"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-amber-600 dark:text-amber-400">
-                          -{item.quantity} un
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setOutputItems(outputItems.filter((_, i) => i !== idx))
-                          }
-                          className="text-slate-400 hover:text-red-500"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
