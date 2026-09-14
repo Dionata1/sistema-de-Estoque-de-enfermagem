@@ -4,8 +4,13 @@
   "outputDirectory": "dist",
   "functions": {
     "api/index.ts": {
+      "runtime": "nodejs24.x",
       "maxDuration": 60,
-      "includeFiles": "firebase-applet-config.json"
+      "includeFiles": [
+        "server.ts",
+        "firebase/**",
+        "firebase-applet-config.json"
+      ]
     }
   },
   "rewrites": [
